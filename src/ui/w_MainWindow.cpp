@@ -268,24 +268,21 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     if (!GlobalConfig.autoStartId.isEmpty())
     {
         auto id = ConnectionId(GlobalConfig.autoStartId);
-        needShowWindow = ConnectionManager->StartConnection(id).has_value();
+        needShowWindow = !ConnectionManager->StartConnection(id).has_value();
     }
-    else
+    if (needShowWindow && connectionListWidget->topLevelItemCount() > 0)
     {
-        if (connectionListWidget->topLevelItemCount() > 0 && connectionListWidget->topLevelItem(0)->childCount() > 0)
-        {
-            // Select the first connection.
-            auto item = connectionListWidget->topLevelItem(0)->child(0);
-            on_connectionListWidget_itemClicked(item, 0);
-            connectionListWidget->setCurrentItem(item);
-        }
+        // Select the first connection.
+        auto item = (connectionListWidget->topLevelItem(0)->childCount() > 0) ? connectionListWidget->topLevelItem(0)->child(0) :
+                                                                                connectionListWidget->topLevelItem(0);
+        connectionListWidget->setCurrentItem(item);
+        on_connectionListWidget_itemClicked(item, 0);
     }
-
     if (needShowWindow)
         this->show();
 
 #ifndef DISABLE_AUTO_UPDATE
-    requestHelper = new QvHttpRequestHelper();
+    requestHelper = new QvHttpRequestHelper(this);
     connect(requestHelper, &QvHttpRequestHelper::httpRequestFinished, this, &MainWindow::VersionUpdate);
     requestHelper->get("https://api.github.com/repos/Qv2ray/Qv2ray/releases/latest");
 #endif
