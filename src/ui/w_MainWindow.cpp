@@ -3,14 +3,14 @@
 #include "components/pac/QvPACHandler.hpp"
 #include "components/plugins/toolbar/QvToolbar.hpp"
 #include "components/proxy/QvProxyConfigurator.hpp"
-#include "core/connection/ConnectionIO.hpp"
+#include "core/settings/SettingsBackend.hpp"
 #include "ui/editors/w_JsonEditor.hpp"
 #include "ui/editors/w_OutboundEditor.hpp"
 #include "ui/editors/w_RoutesEditor.hpp"
+#include "ui/w_ImportConfig.hpp"
+#include "ui/w_PreferencesWindow.hpp"
+#include "ui/w_SubscriptionManager.hpp"
 #include "ui/widgets/ConnectionInfoWidget.hpp"
-#include "w_ImportConfig.hpp"
-#include "w_PreferencesWindow.hpp"
-#include "w_SubscriptionManager.hpp"
 
 #include <QCloseEvent>
 #include <QDebug>
@@ -113,6 +113,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     infoWidget = new ConnectionInfoWidget(this);
     connectionInfoLayout->addWidget(infoWidget);
     //
+    masterLogBrowser->setDocument(vCoreLogDocument);
     vCoreLogHighlighter = new SyntaxHighlighter(GlobalConfig.uiConfig.useDarkTheme, masterLogBrowser->document());
     // For charts
     speedChartWidget = new SpeedWidget(this);
@@ -153,15 +154,16 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     connect(infoWidget, &ConnectionInfoWidget::OnEditRequested, this, &MainWindow::OnEditRequested);
     connect(infoWidget, &ConnectionInfoWidget::OnJsonEditRequested, this, &MainWindow::OnEditJsonRequested);
     //
+    //
     // Setup System tray icons and menus
     hTray.setToolTip(TRAY_TOOLTIP_PREFIX);
     //
-    // Basic actions
+    // Basic tray actions
+    hTray.show();
     tray_action_Start->setEnabled(true);
     tray_action_Stop->setEnabled(false);
     tray_action_Restart->setEnabled(false);
     //
-    tray_SystemProxyMenu->setTitle(tr("System Proxy"));
     tray_SystemProxyMenu->setEnabled(false);
     tray_SystemProxyMenu->addAction(tray_action_SetSystemProxy);
     tray_SystemProxyMenu->addAction(tray_action_ClearSystemProxy);
@@ -176,57 +178,57 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     tray_RootMenu->addAction(tray_action_Restart);
     tray_RootMenu->addSeparator();
     tray_RootMenu->addAction(tray_action_Quit);
+    hTray.setContextMenu(tray_RootMenu);
     //
     connect(tray_action_ShowHide, &QAction::triggered, this, &MainWindow::ToggleVisibility);
     connect(tray_action_ShowPreferencesWindow, &QAction::triggered, this, &MainWindow::on_preferencesBtn_clicked);
-    //
     connect(tray_action_Start, &QAction::triggered, [&] { ConnectionManager->StartConnection(lastConnectedId); });
     connect(tray_action_Stop, &QAction::triggered, ConnectionManager, &QvConfigHandler::StopConnection);
     connect(tray_action_Restart, &QAction::triggered, ConnectionManager, &QvConfigHandler::RestartConnection);
-    //
     connect(tray_action_Quit, &QAction::triggered, this, &MainWindow::on_actionExit_triggered);
     connect(tray_action_SetSystemProxy, &QAction::triggered, this, &MainWindow::MWSetSystemProxy);
     connect(tray_action_ClearSystemProxy, &QAction::triggered, &ClearSystemProxy);
     connect(&hTray, &QSystemTrayIcon::activated, this, &MainWindow::on_activatedTray);
     //
-    // Actions for right click the connection list
+    // Actions for right click the log text browser
     //
-    connect(action_RCM_Start, &QAction::triggered, this, &MainWindow::on_action_StartThis_triggered);
-    //
-    connect(action_RCM_Edit, &QAction::triggered, this, &MainWindow::on_action_RCM_EditThis_triggered);
-    connect(action_RCM_EditJson, &QAction::triggered, this, &MainWindow::on_action_RCM_EditAsJson_triggered);
-    connect(action_RCM_EditComplex, &QAction::triggered, this, &MainWindow::on_action_RCM_EditAsComplex_triggered);
-    //
-    connect(action_RCM_Rename, &QAction::triggered, this, &MainWindow::on_action_RCM_RenameThis_triggered);
-    connect(action_RCM_Duplicate, &QAction::triggered, this, &MainWindow::on_action_RCM_DuplicateThese_triggered);
-    connect(action_RCM_Delete, &QAction::triggered, this, &MainWindow::on_action_RCM_DeleteThese_triggered);
+    logRCM_Menu->addAction(action_RCM_tovCoreLog);
+    logRCM_Menu->addAction(action_RCM_toQvLog);
+    connect(masterLogBrowser, &QTextBrowser::customContextMenuRequested, [&](const QPoint &) { logRCM_Menu->popup(QCursor::pos()); });
+    connect(action_RCM_tovCoreLog, &QAction::triggered, this, &MainWindow::on_action_RCM_tovCoreLog_triggered);
+    connect(action_RCM_toQvLog, &QAction::triggered, this, &MainWindow::on_action_RCM_toQvLog_triggered);
     //
     // Globally invokable signals.
+    //
     connect(this, &MainWindow::StartConnection, ConnectionManager, &QvConfigHandler::RestartConnection);
     connect(this, &MainWindow::StopConnection, ConnectionManager, &QvConfigHandler::StopConnection);
     connect(this, &MainWindow::RestartConnection, ConnectionManager, &QvConfigHandler::RestartConnection);
     //
-    hTray.setContextMenu(tray_RootMenu);
-    hTray.show();
+    // Actions for right click the connection list
     //
-    RCM_Menu->addAction(action_RCM_Start);
-    RCM_Menu->addSeparator();
-    RCM_Menu->addAction(action_RCM_Edit);
-    RCM_Menu->addAction(action_RCM_EditJson);
-    RCM_Menu->addAction(action_RCM_EditComplex);
-    RCM_Menu->addSeparator();
-    RCM_Menu->addAction(action_RCM_Rename);
-    RCM_Menu->addAction(action_RCM_Duplicate);
-    RCM_Menu->addSeparator();
-    RCM_Menu->addAction(action_RCM_Delete);
+    connectionListRCM_Menu->addAction(action_RCM_Start);
+    connectionListRCM_Menu->addSeparator();
+    connectionListRCM_Menu->addAction(action_RCM_Edit);
+    connectionListRCM_Menu->addAction(action_RCM_EditJson);
+    connectionListRCM_Menu->addAction(action_RCM_EditComplex);
+    connectionListRCM_Menu->addSeparator();
+    connectionListRCM_Menu->addAction(action_RCM_SetAutoConnection);
+    connectionListRCM_Menu->addSeparator();
+    connectionListRCM_Menu->addAction(action_RCM_Rename);
+    connectionListRCM_Menu->addAction(action_RCM_Duplicate);
+    connectionListRCM_Menu->addSeparator();
+    connectionListRCM_Menu->addAction(action_RCM_Delete);
+    connect(action_RCM_Start, &QAction::triggered, this, &MainWindow::on_action_StartThis_triggered);
+    connect(action_RCM_SetAutoConnection, &QAction::triggered, this, &MainWindow::on_action_RCM_SetAutoConnection_triggered);
+
+    connect(action_RCM_Edit, &QAction::triggered, this, &MainWindow::on_action_RCM_EditThis_triggered);
+    connect(action_RCM_EditJson, &QAction::triggered, this, &MainWindow::on_action_RCM_EditAsJson_triggered);
+    connect(action_RCM_EditComplex, &QAction::triggered, this, &MainWindow::on_action_RCM_EditAsComplex_triggered);
+    connect(action_RCM_Rename, &QAction::triggered, this, &MainWindow::on_action_RCM_RenameThis_triggered);
+    connect(action_RCM_Duplicate, &QAction::triggered, this, &MainWindow::on_action_RCM_DuplicateThese_triggered);
+    connect(action_RCM_Delete, &QAction::triggered, this, &MainWindow::on_action_RCM_DeleteThese_triggered);
     //
-    QMenu *sortMenu = new QMenu(tr("Sort connection list."), this);
-    QAction *sortAction_SortByName_Asc = new QAction(tr("By connection name, A-Z"));
-    QAction *sortAction_SortByName_Dsc = new QAction(tr("By connection name, Z-A"));
-    QAction *sortAction_SortByPing_Asc = new QAction(tr("By latency, Ascending"));
-    QAction *sortAction_SortByPing_Dsc = new QAction(tr("By latency, Descending"));
-    QAction *sortAction_SortByData_Asc = new QAction(tr("By data, Ascending"));
-    QAction *sortAction_SortByData_Dsc = new QAction(tr("By data, Descending"));
+    // Sort Menu
     //
     connect(sortAction_SortByName_Asc, &QAction::triggered, [&] { SortConnectionList(MW_ITEM_COL_NAME, true); });
     connect(sortAction_SortByName_Dsc, &QAction::triggered, [&] { SortConnectionList(MW_ITEM_COL_NAME, false); });
@@ -237,10 +239,10 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     //
     sortMenu->addAction(sortAction_SortByName_Asc);
     sortMenu->addAction(sortAction_SortByName_Dsc);
-    tray_RootMenu->addSeparator();
+    sortMenu->addSeparator();
     sortMenu->addAction(sortAction_SortByData_Asc);
     sortMenu->addAction(sortAction_SortByData_Dsc);
-    tray_RootMenu->addSeparator();
+    sortMenu->addSeparator();
     sortMenu->addAction(sortAction_SortByPing_Asc);
     sortMenu->addAction(sortAction_SortByPing_Dsc);
     //
@@ -297,6 +299,20 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     CheckSubscriptionsUpdate();
     //
     splitter->setSizes(QList<int>() << 100 << 300);
+    qvLogTimerId = startTimer(1000);
+}
+
+void MainWindow::timerEvent(QTimerEvent *event)
+{
+    if (event->timerId() == qvLogTimerId)
+    {
+        auto log = readLastLog().trimmed();
+        if (!log.isEmpty())
+        {
+            FastAppendTextDocument(NEWLINE + log, qvLogDocument);
+            // qvLogDocument->setPlainText(qvLogDocument->toPlainText() + NEWLINE + log);
+        }
+    }
 }
 
 void MainWindow::keyPressEvent(QKeyEvent *e)
@@ -382,6 +398,11 @@ void MainWindow::VersionUpdate(QByteArray &data)
 
 MainWindow::~MainWindow()
 {
+    if (GlobalConfig.inboundConfig.pacConfig.enablePAC && pacServer != nullptr && pacServer->isRunning())
+    {
+        // Wait for PAC server to finish.
+        pacServer->wait();
+    }
     hTray.hide();
 }
 
@@ -451,7 +472,7 @@ void MainWindow::on_preferencesBtn_clicked()
 }
 void MainWindow::on_clearlogButton_clicked()
 {
-    masterLogBrowser->clear();
+    vCoreLogDocument->clear();
 }
 void MainWindow::on_connectionListWidget_customContextMenuRequested(const QPoint &pos)
 {
@@ -462,7 +483,7 @@ void MainWindow::on_connectionListWidget_customContextMenuRequested(const QPoint
     {
         if (GetItemWidget(item)->IsConnection())
         {
-            RCM_Menu->popup(_pos);
+            connectionListRCM_Menu->popup(_pos);
         }
     }
 }
@@ -577,8 +598,7 @@ void MainWindow::OnDisconnected(const ConnectionId &id)
 
     if (GlobalConfig.inboundConfig.pacConfig.enablePAC)
     {
-        pacServer.StopServer();
-        LOG(MODULE_UI, "Stopping PAC server")
+        pacServer->stopServer();
     }
 }
 
@@ -647,8 +667,9 @@ void MainWindow::OnConnected(const ConnectionId &id)
 
         if (canStartPAC)
         {
-            pacServer.SetProxyString(pacProxyString);
-            pacServer.StartListen();
+            pacServer = new PACServer(this);
+            pacServer->setPACProxyString(pacProxyString);
+            pacServer->start();
         }
         else
         {
@@ -754,17 +775,15 @@ void MainWindow::OnStatsAvailable(const ConnectionId &id, const quint64 upS, con
 void MainWindow::OnVCoreLogAvailable(const ConnectionId &id, const QString &log)
 {
     Q_UNUSED(id);
-    auto bar = masterLogBrowser->verticalScrollBar();
-    auto max = bar->maximum();
-    auto val = bar->value();
-    masterLogBrowser->append(log);
+    FastAppendTextDocument(log.trimmed(), vCoreLogDocument);
+    // vCoreLogDocument->setPlainText(vCoreLogDocument->toPlainText() + log);
     // From https://gist.github.com/jemyzhang/7130092
     auto maxLines = GlobalConfig.uiConfig.maximumLogLines;
-    QTextBlock block = masterLogBrowser->document()->begin();
+    auto block = vCoreLogDocument->begin();
 
     while (block.isValid())
     {
-        if (masterLogBrowser->document()->blockCount() > maxLines)
+        if (vCoreLogDocument->blockCount() > maxLines)
         {
             QTextCursor cursor(block);
             block = block.next();
@@ -776,9 +795,6 @@ void MainWindow::OnVCoreLogAvailable(const ConnectionId &id, const QString &log)
 
         break;
     }
-
-    if (val >= max * 0.8 || val >= max - 20)
-        bar->setValue(max);
 }
 
 void MainWindow::OnEditRequested(const ConnectionId &id)
@@ -912,15 +928,6 @@ void MainWindow::on_action_RCM_EditAsJson_triggered()
     OnEditJsonRequested(get<1>(widget->Identifier()));
 }
 
-void MainWindow::on_connectionListWidget_itemSelectionChanged()
-{
-    if (connectionListWidget->selectedItems().count() > 0)
-    {
-        connectionListWidget->setCurrentItem(connectionListWidget->selectedItems().first());
-        connectionListWidget->setFocus();
-    }
-}
-
 void MainWindow::on_chartVisibilityBtn_clicked()
 {
     speedChartHolderWidget->setVisible(!speedChartWidget->isVisible());
@@ -934,4 +941,42 @@ void MainWindow::on_logVisibilityBtn_clicked()
 void MainWindow::on_clearChartBtn_clicked()
 {
     speedChartWidget->Clear();
+}
+
+void MainWindow::on_connectionListWidget_currentItemChanged(QTreeWidgetItem *current, QTreeWidgetItem *previous)
+{
+    Q_UNUSED(previous)
+    if (current != nullptr && !isExiting)
+    {
+        on_connectionListWidget_itemClicked(current, 0);
+    }
+}
+
+void MainWindow::on_action_RCM_tovCoreLog_triggered()
+{
+    masterLogBrowser->setDocument(vCoreLogDocument);
+}
+
+void MainWindow::on_action_RCM_toQvLog_triggered()
+{
+    masterLogBrowser->setDocument(qvLogDocument);
+}
+
+void MainWindow::on_masterLogBrowser_textChanged()
+{
+    auto bar = masterLogBrowser->verticalScrollBar();
+    bar->setValue(bar->maximum());
+}
+
+void MainWindow::on_action_RCM_SetAutoConnection_triggered()
+{
+    auto current = connectionListWidget->currentItem();
+    if (current != nullptr)
+    {
+        auto widget = GetItemWidget(current);
+        auto &conn = get<1>(widget->Identifier());
+        GlobalConfig.autoStartId = conn.toString();
+        hTray.showMessage(tr("Set auto connection"), tr("Set %1 as auto connect.").arg(GetDisplayName(conn)));
+        SaveGlobalSettings();
+    }
 }

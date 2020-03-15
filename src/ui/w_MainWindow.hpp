@@ -84,6 +84,7 @@ class MainWindow
     void OnGroupDeleted(const GroupId &id, const QList<ConnectionId> &connections);
     //
     void on_action_StartThis_triggered();
+    void on_action_RCM_SetAutoConnection_triggered();
     void on_action_RCM_EditThis_triggered();
     void on_action_RCM_EditAsJson_triggered();
     void on_action_RCM_EditAsComplex_triggered();
@@ -91,20 +92,24 @@ class MainWindow
     void on_action_RCM_DeleteThese_triggered();
     void on_action_RCM_DuplicateThese_triggered();
     //
+    void on_action_RCM_tovCoreLog_triggered();
+    void on_action_RCM_toQvLog_triggered();
+    //
     void on_connectionListWidget_itemDoubleClicked(QTreeWidgetItem *item, int column);
     void on_connectionFilterTxt_textEdited(const QString &arg1);
     void on_connectionListWidget_itemClicked(QTreeWidgetItem *item, int column);
     void on_locateBtn_clicked();
     //
     void SortConnectionList(MW_ITEM_COL byCol, bool asending);
-
-    void on_connectionListWidget_itemSelectionChanged();
-
     void on_chartVisibilityBtn_clicked();
-
     void on_logVisibilityBtn_clicked();
-
     void on_clearChartBtn_clicked();
+    void on_connectionListWidget_currentItemChanged(QTreeWidgetItem *current, QTreeWidgetItem *previous);
+
+    void on_masterLogBrowser_textChanged();
+
+  protected:
+    void timerEvent(QTimerEvent *event) override;
 
   private:
     QHash<GroupId, shared_ptr<QTreeWidgetItem>> groupNodes;
@@ -115,13 +120,13 @@ class MainWindow
     QvHttpRequestHelper *requestHelper;
 #endif
     QSystemTrayIcon hTray;
-    PACServer pacServer;
+    PACServer *pacServer;
     SyntaxHighlighter *vCoreLogHighlighter;
     ConnectionInfoWidget *infoWidget;
     //
     // Actions in the system tray menu
     QMenu *tray_RootMenu = new QMenu(this);
-    QMenu *tray_SystemProxyMenu = new QMenu(this);
+    QMenu *tray_SystemProxyMenu = new QMenu(tr("System Proxy"), this);
     //
     QAction *tray_action_ShowHide = new QAction(tr("Hide"), this);
     QAction *tray_action_ShowPreferencesWindow = new QAction(tr("Preferences"), this);
@@ -132,14 +137,31 @@ class MainWindow
     QAction *tray_action_SetSystemProxy = new QAction(tr("Enable System Proxy"), this);
     QAction *tray_action_ClearSystemProxy = new QAction(tr("Disable System Proxy"), this);
     //
-    QMenu *RCM_Menu = new QMenu(this);
+    QMenu *connectionListRCM_Menu = new QMenu(this);
     QAction *action_RCM_Start = new QAction(tr("Connect to this"), this);
+    QAction *action_RCM_SetAutoConnection = new QAction(tr("Set as automatically connected"), this);
     QAction *action_RCM_Edit = new QAction(tr("Edit"), this);
     QAction *action_RCM_EditJson = new QAction(tr("Edit as JSON"), this);
     QAction *action_RCM_EditComplex = new QAction(tr("Edit as Complex Config"), this);
     QAction *action_RCM_Rename = new QAction(tr("Rename"), this);
     QAction *action_RCM_Duplicate = new QAction(tr("Duplicate to the Same Group"), this);
     QAction *action_RCM_Delete = new QAction(tr("Delete Connection"), this);
+    //
+    QMenu *sortMenu = new QMenu(tr("Sort connection list."), this);
+    QAction *sortAction_SortByName_Asc = new QAction(tr("By connection name, A-Z"));
+    QAction *sortAction_SortByName_Dsc = new QAction(tr("By connection name, Z-A"));
+    QAction *sortAction_SortByPing_Asc = new QAction(tr("By latency, Ascending"));
+    QAction *sortAction_SortByPing_Dsc = new QAction(tr("By latency, Descending"));
+    QAction *sortAction_SortByData_Asc = new QAction(tr("By data, Ascending"));
+    QAction *sortAction_SortByData_Dsc = new QAction(tr("By data, Descending"));
+    //
+    QTextDocument *vCoreLogDocument = new QTextDocument(this);
+    QTextDocument *qvLogDocument = new QTextDocument(this);
+    //
+    int qvLogTimerId = -1;
+    QMenu *logRCM_Menu = new QMenu(this);
+    QAction *action_RCM_tovCoreLog = new QAction(tr("Switch to vCore log"), this);
+    QAction *action_RCM_toQvLog = new QAction(tr("Switch to Qv2ray log"), this);
     //
     ConnectionId lastConnectedId;
     void MWSetSystemProxy();
